@@ -1,4 +1,4 @@
 #!/bin/sh
 
 AB_DIR="`dirname \"$0\"`"
-node "$AB_DIR/nativescript.js" "$@"
+node --es_staging "$AB_DIR/nativescript.js" "$@"

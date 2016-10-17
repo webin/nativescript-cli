@@ -1,1 +1,1 @@
-@node %~dp0\nativescript.js %*
+@node --es_staging %~dp0\nativescript.js %*

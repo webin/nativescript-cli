@@ -48,7 +48,9 @@ export class PlatformService implements IPlatformService {
 
 	private addPlatform(platformParam: string): IFuture<void> {
 		return (() => {
-			let [platform, version] = platformParam.split("@");
+			let data = platformParam.split("@"),
+				platform = data[0],
+				version = data[1];
 
 			this.validatePlatform(platform);
 
@@ -228,7 +230,7 @@ export class PlatformService implements IPlatformService {
 		}).future<boolean>()();
 	}
 
-	@helpers.hook('prepare')
+	// @helpers.hook('prepare')
 	private preparePlatformCore(platform: string): IFuture<boolean> {
 		return (() => {
 			platform = platform.toLowerCase();
@@ -403,7 +405,10 @@ export class PlatformService implements IPlatformService {
 	public updatePlatforms(platforms: string[]): IFuture<void> {
 		return (() => {
 			_.each(platforms, platformParam => {
-				let [platform, version] = platformParam.split("@");
+				let data = platformParam.split("@"),
+					platform = data[0],
+					version = data[1];
+
 				if (this.isPlatformInstalled(platform).wait()) {
 					this.updatePlatform(platform, version).wait();
 				} else {
