@@ -1,9 +1,12 @@
+import * as path from "path";
+
 require("./common/bootstrap");
 $injector.require("logger", "./common/logger");
 $injector.require("config", "./config");
 $injector.require("options", "./options");
-// note: order above is important!
-$injector.require("nativescript-cli", "./nativescript-cli");
+
+// HardCode path to ns-cloud lib for the moment.
+require(path.join(__dirname, "..", "node_modules", "ns-cloud", "lib", "bootstrap"));
 
 $injector.require("projectData", "./project-data");
 $injector.require("projectDataService", "./services/project-data-service");
@@ -126,3 +129,6 @@ $injector.require("iOSLogFilter", "./services/ios-log-filter");
 $injector.require("projectChangesService", "./services/project-changes-service");
 
 $injector.require("emulatorPlatformService", "./services/emulator-platform-service");
+
+// HardCode path to ns-cloud lib for the moment.
+require(path.join(__dirname, "..", "node_modules", "ns-cloud", "lib", "bootstrap"));
