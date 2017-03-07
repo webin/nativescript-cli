@@ -178,13 +178,9 @@ module.exports = function(grunt) {
 	grunt.registerTask("pack", [
 		"clean",
 		"ts:release_build",
-		"shell:npm_test",
 
-		"set_package_version",
-		"shell:build_package",
+		"shell:build_package"
 
-		"copy:package_to_drop_folder",
-		"copy:package_to_qa_drop_folder"
 	]);
 	grunt.registerTask("lint", ["tslint:build"]);
 	grunt.registerTask("all", ["clean", "test", "lint"]);

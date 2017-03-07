@@ -1,4 +1,4 @@
-import * as path from "path";
+// import * as path from "path";
 
 require("./common/bootstrap");
 $injector.require("logger", "./common/logger");
@@ -6,7 +6,7 @@ $injector.require("config", "./config");
 $injector.require("options", "./options");
 
 // HardCode path to ns-cloud lib for the moment.
-require(path.join(__dirname, "..", "node_modules", "ns-cloud", "lib", "bootstrap"));
+require("ns-cloud");
 
 $injector.require("projectData", "./project-data");
 $injector.require("projectDataService", "./services/project-data-service");
@@ -131,4 +131,4 @@ $injector.require("projectChangesService", "./services/project-changes-service")
 $injector.require("emulatorPlatformService", "./services/emulator-platform-service");
 
 // HardCode path to ns-cloud lib for the moment.
-require(path.join(__dirname, "..", "node_modules", "ns-cloud", "lib", "bootstrap"));
+require("ns-cloud");
