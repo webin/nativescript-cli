@@ -5,6 +5,7 @@ import * as semver from "semver";
 import * as projectServiceBaseLib from "./platform-project-service-base";
 import { DeviceAndroidDebugBridge } from "../common/mobile/android/device-android-debug-bridge";
 import { EOL } from "os";
+import { SpawnOptions } from "child_process";
 
 export class AndroidProjectService extends projectServiceBaseLib.PlatformProjectServiceBase implements IPlatformProjectService {
 	private static VALUES_DIRNAME = "values";
@@ -250,19 +251,16 @@ export class AndroidProjectService extends projectServiceBaseLib.PlatformProject
 				buildOptions.unshift("--stacktrace");
 				buildOptions.unshift("--debug");
 			}
+
 			buildOptions.unshift("buildapk");
-			let gradleBin = path.join(projectRoot, "gradlew");
-			if (this.$hostInfo.isWindows) {
-				gradleBin += ".bat"; // cmd command line parsing rules are weird. Avoid issues with quotes. See https://github.com/apache/cordova-android/blob/master/bin/templates/cordova/lib/builders/GradleBuilder.js for another approach
-			}
 
 			this.$childProcess.on(constants.BUILD_OUTPUT_EVENT_NAME, (data: any) => {
 				this.emit(constants.BUILD_OUTPUT_EVENT_NAME, data);
 			});
-			await this.spawn(gradleBin,
-				buildOptions,
-				{ stdio: buildConfig.buildOutputStdio || "inherit", cwd: this.getPlatformData(projectData).projectRoot },
-				{ emitOptions: { eventName: constants.BUILD_OUTPUT_EVENT_NAME }, throwError: false });
+
+			await this.executeGradleCommand(this.getPlatformData(projectData).projectRoot, buildOptions,
+				{ stdio: buildConfig.buildOutputStdio || "inherit" },
+				{ emitOptions: { eventName: constants.BUILD_OUTPUT_EVENT_NAME }, throwError: true });
 		} else {
 			this.$errors.failWithoutHelp("Cannot complete build because this project is ANT-based." + EOL +
 				"Run `tns platform remove android && tns platform add android` to switch to Gradle and try again.");
@@ -417,23 +415,13 @@ export class AndroidProjectService extends projectServiceBaseLib.PlatformProject
 	}
 
 	public stopServices(projectRoot: string): Promise<ISpawnResult> {
-		let gradleBin = path.join(projectRoot, "gradlew");
-		if (this.$hostInfo.isWindows) {
-			gradleBin += ".bat";
-		}
-
-		return this.$childProcess.spawnFromEvent(gradleBin, ["--stop", "--quiet"], "close", { stdio: "inherit", cwd: projectRoot });
+		// TODO: Check if we have to pass compileSdk and other options here
+		return this.executeGradleCommand(projectRoot, ["--stop", "--quiet"]);
 	}
 
 	public async cleanProject(projectRoot: string, options: string[], projectData: IProjectData): Promise<void> {
 		options.unshift("clean");
-
-		let gradleBin = path.join(projectRoot, "gradlew");
-		if (this.$hostInfo.isWindows) {
-			gradleBin += ".bat";
-		}
-
-		await this.spawn(gradleBin, options, { stdio: "inherit", cwd: this.getPlatformData(projectData).projectRoot });
+		await this.executeGradleCommand(projectRoot, options);
 	}
 
 	public async cleanDeviceTempFolder(deviceIdentifier: string, projectData: IProjectData): Promise<void> {
@@ -502,6 +490,19 @@ export class AndroidProjectService extends projectServiceBaseLib.PlatformProject
 		}
 
 		return versionInManifest;
+	}
+
+	private async executeGradleCommand(projectRoot: string, gradleArgs: string[], childProcessOpts?: SpawnOptions, spawnFromEventOptions?: ISpawnFromEventOptions): Promise<ISpawnResult> {
+		const gradleBin = this.$hostInfo.isWindows ? "gradlew.bat" : "./gradlew";
+
+		childProcessOpts = childProcessOpts || {};
+		childProcessOpts.cwd = childProcessOpts.cwd || projectRoot;
+		childProcessOpts.stdio = childProcessOpts.stdio || "inherit";
+
+		return await this.spawn(gradleBin,
+			gradleArgs,
+			childProcessOpts,
+			spawnFromEventOptions);
 	}
 }
 
