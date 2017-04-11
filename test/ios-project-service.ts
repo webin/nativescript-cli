@@ -85,6 +85,7 @@ function createTestInjector(projectPath: string, projectName: string): IInjector
 	testInjector.register("androidProcessService", {});
 	testInjector.register("processService", {});
 	testInjector.register("sysInfo", {});
+	testInjector.register("pbxprojDomXcode", {});
 	return testInjector;
 }
 
@@ -484,5 +485,93 @@ describe("Relative paths", () => {
 
 		let result = iOSProjectService.getLibSubpathRelativeToProjectPath(subpath, projectData);
 		assert.equal(result, path.join("..", "..", "sub", "path"));
+	});
+});
+
+describe("iOS Project Service Signing", () => {
+	let testInjector: IInjector;
+	let projectPath: string;
+	let files: any;
+	let pbxprojects: any;
+	let iOSProjectService: IPlatformProjectService;
+	let projectData: any;
+	let pbxproj: string;
+
+	beforeEach(() => {
+		let projectName = "projectDirectory";
+		files = {};
+		pbxprojects = {};
+		projectPath = temp.mkdirSync(projectName);
+		testInjector = createTestInjector(projectPath, projectName);
+		testInjector.register("fs", {
+			files: {},
+			readJson(path: string): any {
+				if (this.exists(path)) {
+					return JSON.stringify(files[path]);
+				} else {
+					return null;
+				}
+			},
+			exists(path: string): boolean {
+				return path in files;
+			}
+		});
+		testInjector.register("pbxprojDomXcode", {
+			Xcode: {
+				open(path: string) {
+					return pbxprojects[path];
+				}
+			}
+		});
+		pbxproj = path.join(projectPath, "platforms/ios/projectDirectory.xcodeproj/project.pbxproj");
+		iOSProjectService = testInjector.resolve("iOSProjectService");
+		projectData = testInjector.resolve("projectData");
+	});
+
+	describe("Check for Changes", () => {
+		it("sets signingChanged if no Xcode project exists", () => {
+			let changes = <IProjectChangesInfo>{};
+			iOSProjectService.checkForChanges(changes, { bundle: false, release: false, provision: "NativeScriptDev" }, projectData);
+			assert.isTrue(!!changes.signingChanged);
+		});
+		it("sets signingChanged if the Xcode projects is configured with Automatic signing, but proivsion is specified", () => {
+			files[pbxproj] = "";
+			pbxprojects[pbxproj] = {
+				getSigning() {
+					return { style: "Automatic" };
+				}
+			};
+			let changes = <IProjectChangesInfo>{};
+			iOSProjectService.checkForChanges(changes, { bundle: false, release: false, provision: "NativeScriptDev" }, projectData);
+			assert.isTrue(!!changes.signingChanged);
+		});
+		it("sets signingChanged if the Xcode projects is configured with Manual signing, but the proivsion specified differs the selected in the pbxproj", () => {
+			files[pbxproj] = "";
+			pbxprojects[pbxproj] = {
+				getSigning() {
+					return { style: "Manual", configurations: {
+						Debug: { name: "NativeScriptDev2" },
+						Release: { name: "NativeScriptDev2" }
+					}};
+				}
+			};
+			let changes = <IProjectChangesInfo>{};
+			iOSProjectService.checkForChanges(changes, { bundle: false, release: false, provision: "NativeScriptDev" }, projectData);
+			assert.isTrue(!!changes.signingChanged);
+		});
+		it("does not set signingChanged if the Xcode projects is configured with Manual signing and proivsion matches", () => {
+			files[pbxproj] = "";
+			pbxprojects[pbxproj] = {
+				getSigning() {
+					return { style: "Manual", configurations: {
+						Debug: { name: "NativeScriptDev" },
+						Release: { name: "NativeScriptDev" }
+					}};
+				}
+			};
+			let changes = <IProjectChangesInfo>{};
+			iOSProjectService.checkForChanges(changes, { bundle: false, release: false, provision: "NativeScriptDev" }, projectData);
+			assert.isFalse(!!changes.signingChanged);
+		});
 	});
 });

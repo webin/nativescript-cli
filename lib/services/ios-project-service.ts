@@ -11,7 +11,6 @@ import { PlistSession } from "plist-merge-patch";
 import { EOL } from "os";
 import * as temp from "temp";
 import * as plist from "plist";
-import { Xcode } from "pbxproj-dom/xcode";
 import { IOSProvisionService } from "./ios-provision-service";
 
 export class IOSProjectService extends projectServiceBaseLib.PlatformProjectServiceBase implements IPlatformProjectService {
@@ -42,7 +41,8 @@ export class IOSProjectService extends projectServiceBaseLib.PlatformProjectServ
 		private $pluginVariablesService: IPluginVariablesService,
 		private $xcprojService: IXcprojService,
 		private $iOSProvisionService: IOSProvisionService,
-		private $sysInfo: ISysInfo) {
+		private $sysInfo: ISysInfo,
+		private $pbxprojDomXcode: IPbxprojDomXcode) {
 		super($fs, $projectDataService);
 	}
 
@@ -379,10 +379,9 @@ export class IOSProjectService extends projectServiceBaseLib.PlatformProjectServ
 		await this.createIpa(projectRoot, projectData, buildConfig);
 	}
 
-	private async setupSigningFromProvision(projectRoot: string, projectData: IProjectData, provision?: any): Promise<void> {
+	private async setupSigningFromProvision(projectRoot: string, projectData: IProjectData, provision?: string): Promise<void> {
 		if (provision) {
-			const pbxprojPath = path.join(projectRoot, projectData.projectName + ".xcodeproj", "project.pbxproj");
-			const xcode = Xcode.open(pbxprojPath);
+			const xcode = this.$pbxprojDomXcode.Xcode.open(this.getPbxProjPath(projectData));
 			const signing = xcode.getSigning(projectData.projectName);
 
 			let shouldUpdateXcode = false;
@@ -399,8 +398,6 @@ export class IOSProjectService extends projectServiceBaseLib.PlatformProjectServ
 			}
 
 			if (shouldUpdateXcode) {
-				// This is slow, it read through 260 mobileprovision files on my machine and does quite some checking whether provisioning profiles and devices will match.
-				// That's why we try to avoid id by checking in the Xcode first.
 				const pickStart = Date.now();
 				const mobileprovision = await this.$iOSProvisionService.pick(provision, projectData.projectId);
 				const pickEnd = Date.now();
@@ -428,11 +425,16 @@ export class IOSProjectService extends projectServiceBaseLib.PlatformProjectServ
 	}
 
 	private async setupSigningForDevice(projectRoot: string, buildConfig: IiOSBuildConfig, projectData: IProjectData): Promise<void> {
-		const pbxprojPath = path.join(projectRoot, projectData.projectName + ".xcodeproj", "project.pbxproj");
-		const xcode = Xcode.open(pbxprojPath);
+		const xcode = this.$pbxprojDomXcode.Xcode.open(this.getPbxProjPath(projectData));
 		const signing = xcode.getSigning(projectData.projectName);
 
-		if ((this.readXCConfigProvisioningProfile(projectData) || this.readXCConfigProvisioningProfileForIPhoneOs(projectData)) && (!signing || signing.style !== "Manual")) {
+		const hasProvisioningProfileInXCConfig =
+			this.readXCConfigProvisioningProfileSpecifierForIPhoneOs(projectData) ||
+			this.readXCConfigProvisioningProfileSpecifier(projectData) ||
+			this.readXCConfigProvisioningProfileForIPhoneOs(projectData) ||
+			this.readXCConfigProvisioningProfile(projectData);
+
+		if (hasProvisioningProfileInXCConfig && (!signing || signing.style !== "Manual")) {
 			xcode.setManualSigningStyle(projectData.projectName);
 			xcode.save();
 		} else if (!buildConfig.provision && !(signing && signing.style === "Manual" && !buildConfig.teamId)) {
@@ -623,7 +625,7 @@ We will now place an empty obsolete compatability white screen LauncScreen.xib f
 
 		if (provision) {
 			let projectRoot = path.join(projectData.platformsDir, "ios");
-			await this.setupSigningFromProvision(projectRoot, provision);
+			await this.setupSigningFromProvision(projectRoot, projectData, provision);
 		}
 
 		let project = this.createPbxProj(projectData);
@@ -842,6 +844,35 @@ We will now place an empty obsolete compatability white screen LauncScreen.xib f
 
 	public beforePrepareAllPlugins(): Promise<void> {
 		return Promise.resolve();
+	}
+
+	public checkForChanges(changesInfo: IProjectChangesInfo, options: IProjectChangesOptions, projectData: IProjectData): void {
+		const provision = options.provision;
+		if (provision !== undefined) {
+			// Check if the native project's signing is set to the provided provision...
+			const pbxprojPath = this.getPbxProjPath(projectData);
+
+			if (this.$fs.exists(pbxprojPath)) {
+				const xcode = this.$pbxprojDomXcode.Xcode.open(pbxprojPath);
+				const signing = xcode.getSigning(projectData.projectName);
+				if (signing && signing.style === "Manual") {
+					for (let name in signing.configurations) {
+						let config = signing.configurations[name];
+						if (config.uuid !== provision && config.name !== provision) {
+							changesInfo.signingChanged = true;
+							break;
+						}
+					}
+				} else {
+					// Specifying provisioning profile requires "Manual" signing style.
+					// If the current signing style was not "Manual" it was probably "Automatic" or,
+					// it was not uniform for the debug and release build configurations.
+					changesInfo.signingChanged = true;
+				}
+			} else {
+				changesInfo.signingChanged = true;
+			}
+		}
 	}
 
 	private getAllLibsForPluginWithFileExtension(pluginData: IPluginData, fileExtension: string): string[] {
@@ -1184,6 +1215,14 @@ We will now place an empty obsolete compatability white screen LauncScreen.xib f
 
 	private readXCConfigProvisioningProfileForIPhoneOs(projectData: IProjectData): string {
 		return this.readXCConfig("PROVISIONING_PROFILE[sdk=iphoneos*]", projectData);
+	}
+
+	private readXCConfigProvisioningProfileSpecifier(projectData: IProjectData): string {
+		return this.readXCConfig("PROVISIONING_PROFILE_SPECIFIER", projectData);
+	}
+
+	private readXCConfigProvisioningProfileSpecifierForIPhoneOs(projectData: IProjectData): string {
+		return this.readXCConfig("PROVISIONING_PROFILE_SPECIFIER[sdk=iphoneos*]", projectData);
 	}
 
 	private async getDevelopmentTeam(projectData: IProjectData, teamId?: string): Promise<string> {
