@@ -16,6 +16,7 @@ describe("nativescript-cli-lib", () => {
 		deviceEmitter: null,
 		projectService: ["createProject", "isValidNativeScriptProject"],
 		localBuildService: ["build"],
+		npm: ["install", "uninstall", "view", "search"],
 		deviceLogProvider: null
 	};
 
